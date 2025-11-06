@@ -5,7 +5,7 @@ To write a PYTHON program for socket for HTTP for web page upload and download
 
 1.Start the program.
 <BR>
-2.Get the frame size from the user
+2.Get the frame size from the userk
 <BR>
 3.To create the frame based on the user request.
 <BR>
