@@ -20,61 +20,115 @@ To write a PYTHON program for socket for HTTP for web page upload and download
 ```
 import socket
 
-c = socket.socket()
-c.connect(('localhost', 8080))
+def send_request(host, port, request, file_data=b""):
+    """Send a raw HTTP request and return the response."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((host, port))
+        s.sendall(request.encode() + file_data)
+        response = s.recv(4096)
+    return response
 
-n = int(input("Enter number of frames to send: "))
 
-for i in range(n):
-    frame = f"Frame {i+1}"
-    c.send(frame.encode())
-    ack = c.recv(1024).decode()
-    print(f"Server reply for {frame}: {ack}")
-    if ack == "NACK":
-        print("Resending frame...")
-        c.send(frame.encode())
-        print("Resent:", c.recv(1024).decode())
+def upload_file(host, port, filename):
+    """Upload a file to the server."""
+    with open(filename, 'rb') as file:
+        file_data = file.read()
+        content_length = len(file_data)
+        
+    # Create HTTP POST request
+    request = (
+        f"POST /upload HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        f"Content-Length: {content_length}\r\n"
+        f"Content-Type: application/octet-stream\r\n"
+        f"\r\n"
+    )
+    
+    response = send_request(host, port, request, file_data)
+    print("Upload response:\n", response.decode(errors="ignore"))
 
-c.send(b"exit")
-c.close()
-print("Client closed.")
+
+def download_file(host, port, filename):
+    """Download a file from the server."""
+    request = f"GET /{filename} HTTP/1.1\r\nHost: {host}\r\n\r\n"
+    response = send_request(host, port, request)
+    
+    # Split headers and content
+    if b"\r\n\r\n" in response:
+        header, file_content = response.split(b"\r\n\r\n", 1)
+        with open("downloaded_" + filename, "wb") as f:
+            f.write(file_content)
+        print("Download successful! Saved as:", "downloaded_" + filename)
+    else:
+        print("Invalid response received.")
+
+
+if __name__ == "__main__":
+    host = 'localhost'  # Connect to local server
+    port = 8080
+
+    # Create a test file to upload
+    with open('example.txt', 'w') as f:
+        f.write("This is a sample file uploaded from client.\n")
+
+    # Upload the file
+    upload_file(host, port, 'example.txt')
+
+    # Download the same file
+    download_file(host, port, 'uploaded_file.txt')
 
 ```
 
 # server
 
 ```
+# server.py
 import socket
-import random
+import os
 
-s = socket.socket()
-s.bind(('localhost', 8080))
-s.listen(1)
-print("Server listening...")
+HOST = 'localhost'
+PORT = 8080
 
-conn, addr = s.accept()
-print("Connected from:", addr)
+def handle_client(conn):
+    request = conn.recv(4096).decode(errors='ignore')
+    print("Received request:\n", request)
 
-while True:
-    data = conn.recv(1024).decode()
-    if not data or data.lower() == 'exit':
-        break
+    if request.startswith("POST /upload"):
+        # Extract file data after headers
+        if "\r\n\r\n" in request:
+            header, file_data = request.split("\r\n\r\n", 1)
+            with open("uploaded_file.txt", "wb") as f:
+                f.write(file_data.encode())
+            response = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
+        else:
+            response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing file data"
+        conn.sendall(response.encode())
 
-    print("Received:", data)
-    # Randomly simulate ACK or NACK
-    ack = "ACK" if random.choice([True, False]) else "NACK"
-    conn.send(ack.encode())
+    elif request.startswith("GET /"):
+        filename = request.split(" ")[1].lstrip("/")
+        if os.path.exists(filename):
+            with open(filename, "rb") as f:
+                file_content = f.read()
+            response = b"HTTP/1.1 200 OK\r\n\r\n" + file_content
+            conn.sendall(response)
+        else:
+            conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\nFile not found")
 
-conn.close()
-s.close()
-print("Server closed.")
+    conn.close()
 
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind((HOST, PORT))
+    s.listen(1)
+    print(f"Server running on {HOST}:{PORT}...")
+    while True:
+        conn, addr = s.accept()
+        handle_client(conn)
 ```
 
 
 ## OUTPUT
 
-<img width="1071" height="326" alt="image" src="https://github.com/user-attachments/assets/1826ec0f-6436-449d-a157-0ba778b2220f" />
+<img width="1026" height="297" alt="image" src="https://github.com/user-attachments/assets/62f35a01-71f5-4c1b-84e7-5773fae0e23e" />
 
 ## Result
 Thus the socket for HTTP for web page upload and download created and Executed
